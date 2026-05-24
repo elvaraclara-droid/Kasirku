@@ -55,52 +55,23 @@ export async function deleteToko(id) {
   if (error) throw error;
 }
 
-/** Daftarkan toko baru + kasir admin pertama */
+/** Daftarkan toko baru + kasir admin pertama (via RPC — bypass RLS) */
 export async function registerToko({
   namaToko, alamat, telepon, email, kode,
   usernameAdmin, passwordAdmin, namaAdmin,
-  paketId,
 }) {
-  // Cek kode toko unik
-  const { data: existing } = await supabase
-    .from("toko").select("id").eq("kode", kode.toUpperCase().trim()).maybeSingle();
-  if (existing) throw new Error("Kode toko sudah digunakan.");
-
-  // Buat toko
-  const { data: toko, error: errToko } = await supabase
-    .from("toko")
-    .insert({
-      kode: kode.toUpperCase().trim(),
-      nama: namaToko,
-      alamat: alamat || "",
-      telepon: telepon || "",
-      email: email || "",
-      aktif: false, // diaktifkan setelah lisensi dibuat
-    })
-    .select()
-    .single();
-  if (errToko) throw errToko;
-
-  // Buat kasir admin_toko pertama
-  const { error: errKasir } = await supabase.from("kasir").insert({
-    toko_id:  toko.id,
-    username: usernameAdmin,
-    password: passwordAdmin,
-    nama:     namaAdmin,
-    role:     "admin_toko",
-    aktif:    true,
+  const { data, error } = await supabase.rpc("register_toko", {
+    p_kode:           kode.toUpperCase().trim(),
+    p_nama:           namaToko,
+    p_username_admin: usernameAdmin,
+    p_password_admin: passwordAdmin,
+    p_nama_admin:     namaAdmin || namaToko,
+    p_alamat:         alamat || "",
+    p_telepon:        telepon || "",
+    p_email:          email || "",
   });
-  if (errKasir) throw errKasir;
-
-  // Buat cabang utama default
-  const { error: errCabang } = await supabase.from("cabang").insert({
-    toko_id: toko.id,
-    nama:    "Cabang Utama",
-    aktif:   true,
-  });
-  if (errCabang) throw errCabang;
-
-  return toko;
+  if (error) throw error;
+  return data?.[0] || data;
 }
 
 
