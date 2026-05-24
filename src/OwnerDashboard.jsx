@@ -664,7 +664,14 @@ export default function OwnerDashboard({ auth, onLogout }) {
                         <td style={S.td}>
                           {pk
                             ? <span style={{ color: pk.warna, fontWeight:700, fontSize:12 }}>{pk.nama}</span>
-                            : <span style={{ color:"#334155", fontSize:11 }}>—</span>}
+                            : t.paket_pilihan
+                              ? <span>
+                                  <span style={{ color: getPaketById(t.paket_pilihan)?.warna || "#F59E0B", fontWeight:700, fontSize:12 }}>
+                                    {getPaketById(t.paket_pilihan)?.nama || t.paket_pilihan}
+                                  </span>
+                                  <span style={{ color:"#F59E0B", fontSize:10, marginLeft:4 }}>(belum bayar)</span>
+                                </span>
+                              : <span style={{ color:"#334155", fontSize:11 }}>—</span>}
                         </td>
                         <td style={S.td}>
                           {st
