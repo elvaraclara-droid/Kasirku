@@ -55,7 +55,7 @@ export async function deleteToko(id) {
 /** Daftarkan toko baru + kasir admin pertama (via RPC — bypass RLS) */
 export async function registerToko({
   namaToko, alamat, telepon, email, kode,
-  usernameAdmin, passwordAdmin, namaAdmin,
+  usernameAdmin, passwordAdmin, namaAdmin, paketId,
 }) {
   const { data, error } = await supabase.rpc("register_toko", {
     p_kode:           kode.toUpperCase().trim(),
