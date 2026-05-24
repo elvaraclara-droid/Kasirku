@@ -209,7 +209,14 @@ export async function fetchKasirByToko(tokoId) {
     p_toko_id: tokoId,
   });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map(k => ({
+    id:         k.r_id,
+    username:   k.r_username,
+    nama:       k.r_nama,
+    role:       k.r_role,
+    aktif:      k.r_aktif,
+    created_at: k.r_created_at,
+  }));
 }
 
 /** Tambah kasir baru */
