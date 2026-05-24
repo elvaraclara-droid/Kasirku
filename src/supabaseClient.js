@@ -30,28 +30,25 @@ export async function loginOwner(username, password) {
   return { username, nama: row.nama_owner };
 }
 
-/** Ambil semua toko */
+/** Ambil semua toko — via RPC agar tidak kena blok RLS */
 export async function fetchAllToko() {
-  const { data, error } = await supabase
-    .from("toko")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.rpc("owner_get_toko");
   if (error) throw error;
-  return data;
+  return data ?? [];
 }
 
-/** Aktifkan / nonaktifkan toko */
+/** Aktifkan / nonaktifkan toko — via RPC */
 export async function toggleAktifToko(id, aktif) {
-  const { error } = await supabase
-    .from("toko")
-    .update({ aktif, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const { error } = await supabase.rpc("owner_toggle_toko", {
+    p_id: id,
+    p_aktif: aktif,
+  });
   if (error) throw error;
 }
 
-/** Hapus toko (cascade ke lisensi, kasir, produk, transaksi) */
+/** Hapus toko (cascade ke lisensi, kasir, produk, transaksi) — via RPC */
 export async function deleteToko(id) {
-  const { error } = await supabase.from("toko").delete().eq("id", id);
+  const { error } = await supabase.rpc("owner_delete_toko", { p_id: id });
   if (error) throw error;
 }
 
@@ -123,14 +120,15 @@ export function generateLisensiKey() {
   return `LIS-${seg()}-${seg()}-${seg()}`;
 }
 
-/** Ambil semua lisensi (Owner Dashboard) */
+/** Ambil semua lisensi (Owner Dashboard) — via RPC */
 export async function fetchAllLisensi() {
-  const { data, error } = await supabase
-    .from("lisensi")
-    .select("*, toko(nama, kode)")
-    .order("tgl_expired", { ascending: true, nullsFirst: false });
+  const { data, error } = await supabase.rpc("owner_get_lisensi");
   if (error) throw error;
-  return data;
+  // Normalisasi ke format yang sama dengan query lama (toko: { nama, kode })
+  return (data ?? []).map(l => ({
+    ...l,
+    toko: { nama: l.toko_nama, kode: l.toko_kode },
+  }));
 }
 
 /** Ambil lisensi milik satu toko */
@@ -144,58 +142,47 @@ export async function fetchLisensiByToko(tokoId) {
   return data;
 }
 
-/** Buat lisensi baru */
+/** Buat lisensi baru — via RPC */
 export async function createLisensi({
   tokoId, lisensiKey, paket,
   maksProduk, maksKasir, maksCabang,
   tglMulai, tglExpired, catatan,
 }) {
   const key = lisensiKey || generateLisensiKey();
-  const { data, error } = await supabase
-    .from("lisensi")
-    .insert({
-      toko_id:     tokoId,
-      lisensi_key: key,
-      paket:       paket || "starter",
-      maks_produk: maksProduk ?? null,
-      maks_kasir:  maksKasir  ?? null,
-      maks_cabang: maksCabang ?? null,
-      tgl_mulai:   tglMulai || new Date().toISOString().slice(0, 10),
-      tgl_expired: tglExpired || null,
-      catatan:     catatan || "",
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("owner_create_lisensi", {
+    p_toko_id:     tokoId,
+    p_lisensi_key: key,
+    p_paket:       paket || "starter",
+    p_maks_produk: maksProduk ?? null,
+    p_maks_kasir:  maksKasir  ?? null,
+    p_maks_cabang: maksCabang ?? null,
+    p_tgl_mulai:   tglMulai || new Date().toISOString().slice(0, 10),
+    p_tgl_expired: tglExpired || null,
+    p_catatan:     catatan || "",
+  });
   if (error) throw error;
-
-  // Aktifkan toko otomatis saat dapat lisensi pertama
-  await supabase.from("toko").update({ aktif: true }).eq("id", tokoId);
-
-  return data;
+  return { id: data, lisensi_key: key };
 }
 
-/** Update lisensi (perpanjang / upgrade paket) */
+/** Update lisensi (perpanjang / upgrade paket) — via RPC */
 export async function updateLisensi(id, {
   paket, maksProduk, maksKasir, maksCabang, tglExpired, catatan,
 }) {
-  const { error } = await supabase
-    .from("lisensi")
-    .update({
-      paket,
-      maks_produk: maksProduk ?? null,
-      maks_kasir:  maksKasir  ?? null,
-      maks_cabang: maksCabang ?? null,
-      tgl_expired: tglExpired || null,
-      catatan,
-      updated_at:  new Date().toISOString(),
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("owner_update_lisensi", {
+    p_id:          id,
+    p_paket:       paket,
+    p_maks_produk: maksProduk ?? null,
+    p_maks_kasir:  maksKasir  ?? null,
+    p_maks_cabang: maksCabang ?? null,
+    p_tgl_expired: tglExpired || null,
+    p_catatan:     catatan || "",
+  });
   if (error) throw error;
 }
 
-/** Hapus lisensi */
+/** Hapus lisensi — via RPC */
 export async function deleteLisensi(id) {
-  const { error } = await supabase.from("lisensi").delete().eq("id", id);
+  const { error } = await supabase.rpc("owner_delete_lisensi", { p_id: id });
   if (error) throw error;
 }
 
@@ -204,16 +191,13 @@ export async function deleteLisensi(id) {
 // KASIR (manajemen user per toko)
 // ══════════════════════════════════════════════════════════════
 
-/** Ambil semua kasir milik toko */
+/** Ambil semua kasir milik toko — via RPC */
 export async function fetchKasirByToko(tokoId) {
-  const { data, error } = await supabase
-    .from("kasir")
-    .select("id, username, nama, role, aktif, created_at")
-    .eq("toko_id", tokoId)
-    .order("role")   // admin_toko dulu, baru kasir biasa
-    .order("nama");
+  const { data, error } = await supabase.rpc("owner_get_kasir", {
+    p_toko_id: tokoId,
+  });
   if (error) throw error;
-  return data;
+  return data ?? [];
 }
 
 /** Tambah kasir baru */
@@ -245,12 +229,12 @@ export async function hapusKasir(id) {
   if (error) throw error;
 }
 
-/** Owner reset password kasir */
+/** Owner reset password kasir — via RPC */
 export async function ownerResetPasswordKasir(kasirId, passwordBaru) {
-  const { error } = await supabase
-    .from("kasir")
-    .update({ password: passwordBaru, updated_at: new Date().toISOString() })
-    .eq("id", kasirId);
+  const { error } = await supabase.rpc("owner_reset_password_kasir", {
+    p_kasir_id: kasirId,
+    p_password: passwordBaru,
+  });
   if (error) throw error;
 }
 
@@ -584,19 +568,6 @@ export async function fetchRiwayatSesi(tokoId, { limit = 30 } = {}) {
 /**
  * Simpan transaksi lengkap (header + items) dalam satu operasi.
  * Trigger di DB akan otomatis mengurangi stok.
- *
- * @param {Object} param
- * @param {number}  param.tokoId
- * @param {number}  param.cabangId
- * @param {number}  param.kasirId
- * @param {number}  param.sesiId
- * @param {Array}   param.items        — array item keranjang
- * @param {number}  param.diskonPersen
- * @param {number}  param.diskonNominal
- * @param {number}  param.pajakPersen
- * @param {string}  param.metodeBayar  — 'tunai'|'qris'|'transfer'|'debit'|'kredit'
- * @param {number}  param.bayar
- * @param {string}  param.catatan
  */
 export async function simpanTransaksi({
   tokoId, cabangId, kasirId, sesiId,
@@ -760,8 +731,6 @@ export async function produkTerlaris(tokoId, { tanggalDari, tanggalSampai, limit
     .limit(limit);
 
   if (tanggalDari || tanggalSampai) {
-    // Filter via transaksi.created_at — join via subquery tidak tersedia di JS client,
-    // ambil transaksi_id dulu
     const { data: trxIds } = await supabase
       .from("transaksi")
       .select("id")
