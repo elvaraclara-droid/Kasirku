@@ -66,6 +66,7 @@ export async function registerToko({
     p_alamat:         alamat || "",
     p_telepon:        telepon || "",
     p_email:          email || "",
+    p_paket:          paketId || "growth",
   });
   if (error) throw error;
   return data?.[0] || data;
