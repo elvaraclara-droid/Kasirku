@@ -11,6 +11,7 @@ import {
   fetchCabangByToko, tambahCabang, updateCabang, hapusCabang,
   fetchTransaksi, rekapHarian,
   countProdukAktif, countKasirAktif,
+  updateProfilToko, uploadLogoToko, getLogoToko,
 } from "./supabaseClient";
 import { formatRupiah } from "./paketConfig";
 
@@ -555,6 +556,126 @@ function TabLaporan({ auth }) {
   );
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// TAB: PROFIL TOKO
+// ══════════════════════════════════════════════════════════════
+function TabProfil({ auth, onProfilUpdated }) {
+  const { tokoId } = auth;
+  const [form, setForm]       = useState({ nama: auth.namaToko || "", alamat: "", telepon: "", email: "" });
+  const [logoPreview, setLogoPreview] = useState(auth.logoUrl || null);
+  const [logoFile, setLogoFile]       = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState("");
+  const [err, setErr]         = useState("");
+
+  function handleFileChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setErr("Logo maksimal 2 MB."); return; }
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setLogoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  async function handleSave() {
+    if (!form.nama.trim()) { setErr("Nama toko wajib diisi."); return; }
+    setLoading(true); setErr(""); setSuccess("");
+    try {
+      await updateProfilToko(tokoId, {
+        nama:     form.nama.trim(),
+        alamat:   form.alamat.trim(),
+        telepon:  form.telepon.trim(),
+        email:    form.email.trim(),
+      });
+      if (logoFile) {
+        const reader = new FileReader();
+        await new Promise((res, rej) => {
+          reader.onload = async (ev) => {
+            try { await uploadLogoToko(tokoId, ev.target.result); res(); }
+            catch(e) { rej(e); }
+          };
+          reader.readAsDataURL(logoFile);
+        });
+      }
+      setSuccess("Profil toko berhasil disimpan!");
+      onProfilUpdated?.({ namaToko: form.nama.trim(), logoUrl: logoPreview });
+    } catch(e) {
+      setErr(e.message || "Gagal menyimpan profil.");
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontSize:18, fontWeight:700, marginBottom:20 }}>🏪 Profil Toko</h2>
+
+      {err     && <div style={S.err}>{err}</div>}
+      {success && <div style={{ background:"#052e16", color:"#4ade80", padding:"10px 14px", borderRadius:8, fontSize:13, marginBottom:12 }}>{success}</div>}
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+        {/* Logo */}
+        <div style={S.card}>
+          <div style={{ fontWeight:600, marginBottom:16 }}>Logo Toko</div>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:14 }}>
+            <div style={{ width:120, height:120, borderRadius:16, border:`2px dashed ${BORDER}`,
+                          background:"#0F172A", display:"flex", alignItems:"center", justifyContent:"center",
+                          overflow:"hidden" }}>
+              {logoPreview
+                ? <img src={logoPreview} alt="logo" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                : <span style={{ fontSize:40 }}>🏪</span>
+              }
+            </div>
+            <label style={{ cursor:"pointer" }}>
+              <input type="file" accept="image/*" style={{ display:"none" }} onChange={handleFileChange} />
+              <span style={{ ...S.btn(), fontSize:12, padding:"7px 16px" }}>📷 Pilih Logo</span>
+            </label>
+            <div style={{ fontSize:11, color:MUTED, textAlign:"center" }}>PNG/JPG, maks 2 MB<br/>Tampil di struk & header kasir</div>
+            {logoPreview && (
+              <button style={{ ...S.btnSm("#EF4444") }} onClick={() => { setLogoPreview(null); setLogoFile(null); }}>
+                🗑 Hapus Logo
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Info Toko */}
+        <div style={S.card}>
+          <div style={{ fontWeight:600, marginBottom:16 }}>Informasi Toko</div>
+          <Field label="Nama Toko *">
+            <input style={S.inp} value={form.nama}
+              onChange={e => setForm(f => ({ ...f, nama: e.target.value }))}
+              placeholder="Nama toko Anda" />
+          </Field>
+          <Field label="Alamat">
+            <input style={S.inp} value={form.alamat}
+              onChange={e => setForm(f => ({ ...f, alamat: e.target.value }))}
+              placeholder="Alamat toko (opsional)" />
+          </Field>
+          <Field label="Telepon / WhatsApp">
+            <input style={S.inp} value={form.telepon}
+              onChange={e => setForm(f => ({ ...f, telepon: e.target.value }))}
+              placeholder="08xxxxxxxxxx" />
+          </Field>
+          <Field label="Email">
+            <input style={S.inp} value={form.email} type="email"
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              placeholder="email@toko.com" />
+          </Field>
+        </div>
+      </div>
+
+      <div style={{ marginTop:4, display:"flex", justifyContent:"flex-end" }}>
+        <button style={{ ...S.btn("#22C55E"), padding:"10px 28px", fontSize:14 }}
+          onClick={handleSave} disabled={loading}>
+          {loading ? "Menyimpan..." : "💾 Simpan Profil"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════
 // MAIN: AdminTokoPage
 // ══════════════════════════════════════════════════════════════
@@ -563,17 +684,23 @@ const TABS = [
   { id:"kategori",  label:"🏷️ Kategori" },
   { id:"kasir",     label:"👤 Kasir" },
   { id:"laporan",   label:"📊 Laporan" },
+  { id:"profil",    label:"🏪 Profil Toko" },
 ];
 
 export default function AdminTokoPage({ auth, onLogout }) {
   const [tab, setTab] = useState("produk");
+  const [authState, setAuthState] = useState(auth);
+  function handleProfilUpdated(updated) { setAuthState(a => ({ ...a, ...updated })); }
 
   return (
     <div style={S.wrap}>
       {/* Header */}
       <div style={S.header}>
         <div>
-          <div style={{ fontWeight:700, fontSize:16 }}>{auth.namaToko}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            {authState.logoUrl && <img src={authState.logoUrl} alt="logo" style={{ width:32, height:32, borderRadius:8, objectFit:"cover" }} />}
+            <div style={{ fontWeight:700, fontSize:16 }}>{authState.namaToko}</div>
+          </div>
           <div style={{ fontSize:12, color:MUTED }}>Admin: {auth.namaKasir || auth.username}</div>
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -599,6 +726,7 @@ export default function AdminTokoPage({ auth, onLogout }) {
         {tab === "kategori" && <TabKategori auth={auth} />}
         {tab === "kasir"    && <TabKasir    auth={auth} />}
         {tab === "laporan"  && <TabLaporan  auth={auth} />}
+        {tab === "profil"   && <TabProfil   auth={authState} onProfilUpdated={handleProfilUpdated} />}
       </div>
     </div>
   );
