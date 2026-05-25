@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import LoginPage     from "./LoginPage";
 import KasirPage     from "./KasirPage";
+import AdminTokoPage from "./AdminTokoPage";
 import OwnerDashboard from "./OwnerDashboard";
 import { bukaSesiKasir, fetchSesiAktif } from "./supabaseClient";
 import { formatRupiah, statusLisensi, sisaHari } from "./paketConfig";
@@ -18,14 +19,14 @@ const KEY_SESI = "pos_sesi";
 
 // ── Helper persist ────────────────────────────────────────────
 function saveSession(auth, sesi) {
-  sessionStorage.setItem(KEY_AUTH, JSON.stringify(auth));
-  if (sesi) sessionStorage.setItem(KEY_SESI, JSON.stringify(sesi));
-  else sessionStorage.removeItem(KEY_SESI);
+  localStorage.setItem(KEY_AUTH, JSON.stringify(auth));
+  if (sesi) localStorage.setItem(KEY_SESI, JSON.stringify(sesi));
+  else localStorage.removeItem(KEY_SESI);
 }
 function loadSession() {
   try {
-    const auth = JSON.parse(sessionStorage.getItem(KEY_AUTH) || "null");
-    const sesi = JSON.parse(sessionStorage.getItem(KEY_SESI) || "null");
+    const auth = JSON.parse(localStorage.getItem(KEY_AUTH) || "null");
+    const sesi = JSON.parse(localStorage.getItem(KEY_SESI) || "null");
     return { auth, sesi };
   } catch { return { auth: null, sesi: null }; }
 }
@@ -166,7 +167,7 @@ export default function App() {
   const [role,  setRole]  = useState(null);   // 'kasir' | 'owner'
   const [sesi,  setSesi]  = useState(null);   // sesi kasir aktif
 
-  // Restore dari sessionStorage (refresh halaman tidak logout)
+  // Restore dari localStorage (persist setelah browser ditutup)
   useEffect(() => {
     const { auth: a, sesi: s } = loadSession();
     if (a) {
@@ -178,9 +179,13 @@ export default function App() {
 
   // ── Callback dari LoginPage ──────────────────────────────
   function handleLogin(loginRole, data) {
-    const authData = { ...data, _role: loginRole };
+    // role bisa: 'owner', 'admin_toko', 'kasir'
+    const effectiveRole = loginRole === "kasir" && data.roleKasir === "admin_toko"
+      ? "admin_toko"
+      : loginRole;
+    const authData = { ...data, _role: effectiveRole };
     setAuth(authData);
-    setRole(loginRole);
+    setRole(effectiveRole);
     setSesi(null);
     saveSession(authData, null);
   }
@@ -203,8 +208,8 @@ export default function App() {
     setAuth(null);
     setRole(null);
     setSesi(null);
-    sessionStorage.removeItem(KEY_AUTH);
-    sessionStorage.removeItem(KEY_SESI);
+    localStorage.removeItem(KEY_AUTH);
+    localStorage.removeItem(KEY_SESI);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -217,6 +222,16 @@ export default function App() {
   // Owner
   if (role === "owner") {
     return <OwnerDashboard auth={auth} onLogout={handleLogout} />;
+  }
+
+  // Admin toko — punya akses manajemen produk, kasir, laporan
+  if (role === "admin_toko") {
+    return (
+      <AdminTokoPage
+        auth={auth}
+        onLogout={handleLogout}
+      />
+    );
   }
 
   // Kasir — belum buka sesi
