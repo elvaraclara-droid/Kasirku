@@ -7,7 +7,7 @@
 //                         role: 'kasir' | 'owner'
 // ══════════════════════════════════════════════════════════════
 import { useState } from "react";
-import { loginKasir, loginOwner, registerToko } from "./supabaseClient";
+import { loginKasir, loginKasirTanpaLisensi, loginOwner, registerToko } from "./supabaseClient";
 import { PAKET_LIST } from "./paketConfig";
 
 const WA_NUMBER = "6285156392033"; // ganti nomor WA Anda
@@ -73,10 +73,17 @@ export default function LoginPage({ onLogin }) {
 
   // ── Login kasir ────────────────────────────────────────────
   async function tryLoginKasir() {
-    if (!lisensi || !user || !pass) { setErr("Semua field wajib diisi."); return; }
+    if (!user || !pass) { setErr("Username dan password wajib diisi."); return; }
     setLoading(true); setErr("");
     try {
-      const sesi = await loginKasir(lisensi, user, pass);
+      let sesi;
+      if (lisensi) {
+        // Ada lisensi → simpan ke DB
+        sesi = await loginKasir(lisensi, user, pass);
+      } else {
+        // Tanpa lisensi → pakai yang tersimpan di DB
+        sesi = await loginKasirTanpaLisensi(user, pass);
+      }
       onLogin("kasir", sesi);
     } catch (e) {
       setErr(e.message || "Login gagal.");
@@ -166,10 +173,15 @@ export default function LoginPage({ onLogin }) {
             {err && <div style={S.err}>{err}</div>}
 
             <div style={S.fg}>
-              <label style={S.lbl}>Kode Lisensi</label>
+              <label style={S.lbl}>
+                Kode Lisensi
+                <span style={{ color:"#475569", fontWeight:400, marginLeft:6 }}>
+                  (opsional jika sudah pernah login)
+                </span>
+              </label>
               <input style={S.inp} value={lisensi}
                 onChange={e => setLisensi(e.target.value.toUpperCase())}
-                placeholder="LIS-XXXX-XXXX-XXXX" />
+                placeholder="LIS-XXXX-XXXX-XXXX — kosongkan jika sudah tersimpan" />
             </div>
             <div style={S.fg}>
               <label style={S.lbl}>Username</label>
