@@ -600,7 +600,7 @@ export async function simpanTransaksi({
     p_bayar:          bayar,
     p_kembalian:      kembalian,
     p_catatan:        catatan,
-    p_items:          JSON.stringify(itemsJson),
+    p_items:          itemsJson,
   });
   if (error) throw error;
 
