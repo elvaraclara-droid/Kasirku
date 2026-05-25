@@ -47,7 +47,7 @@ export default function LoginPage({ onLogin }) {
   const [showOwner, setShowOwner] = useState(false);
 
   // Login kasir
-  const [lisensi, setLisensi] = useState("");
+  const [lisensi, setLisensi] = useState(null); // null = hidden, string = visible
   const [user,    setUser]    = useState("");
   const [pass,    setPass]    = useState("");
 
@@ -69,7 +69,7 @@ export default function LoginPage({ onLogin }) {
     if (next >= 5) { setShowOwner(true); setLogoHit(0); }
   }
 
-  function resetForm() { setLisensi(""); setUser(""); setPass(""); setErr(""); setOk(""); }
+  function resetForm() { setLisensi(null); setUser(""); setPass(""); setErr(""); setOk(""); }
 
   // ── Login kasir ────────────────────────────────────────────
   async function tryLoginKasir() {
@@ -77,11 +77,11 @@ export default function LoginPage({ onLogin }) {
     setLoading(true); setErr("");
     try {
       let sesi;
-      if (lisensi) {
-        // Ada lisensi → simpan ke DB
+      if (lisensi && lisensi.trim()) {
+        // Ada lisensi → simpan & validasi ke DB
         sesi = await loginKasir(lisensi, user, pass);
       } else {
-        // Tanpa lisensi → pakai yang tersimpan di DB
+        // Tanpa lisensi → cari lisensi toko otomatis dari DB
         sesi = await loginKasirTanpaLisensi(user, pass);
       }
       onLogin("kasir", sesi);
@@ -173,21 +173,10 @@ export default function LoginPage({ onLogin }) {
             {err && <div style={S.err}>{err}</div>}
 
             <div style={S.fg}>
-              <label style={S.lbl}>
-                Kode Lisensi
-                <span style={{ color:"#475569", fontWeight:400, marginLeft:6 }}>
-                  (opsional jika sudah pernah login)
-                </span>
-              </label>
-              <input style={S.inp} value={lisensi}
-                onChange={e => setLisensi(e.target.value.toUpperCase())}
-                placeholder="LIS-XXXX-XXXX-XXXX — kosongkan jika sudah tersimpan" />
-            </div>
-            <div style={S.fg}>
               <label style={S.lbl}>Username</label>
               <input style={S.inp} value={user}
                 onChange={e => setUser(e.target.value)}
-                placeholder="Username kasir" />
+                placeholder="Username kasir" autoFocus />
             </div>
             <div style={S.fg}>
               <label style={S.lbl}>Password</label>
@@ -195,6 +184,29 @@ export default function LoginPage({ onLogin }) {
                 onChange={e => setPass(e.target.value)}
                 placeholder="Password"
                 onKeyDown={e => e.key === "Enter" && tryLoginKasir()} />
+            </div>
+
+            {/* Kode lisensi — hanya tampil jika dibuka */}
+            <div style={{ marginBottom:14 }}>
+              <button
+                type="button"
+                onClick={() => setLisensi(prev => prev === null ? "" : null)}
+                style={{ background:"none", border:"none", color:"#6366F1", fontSize:12,
+                         cursor:"pointer", padding:0, textDecoration:"underline" }}>
+                {lisensi === null ? "▶ Punya kode lisensi baru? Klik di sini" : "▼ Sembunyikan kode lisensi"}
+              </button>
+              {lisensi !== null && (
+                <div style={{ marginTop:8 }}>
+                  <label style={S.lbl}>Kode Lisensi</label>
+                  <input style={S.inp} value={lisensi}
+                    onChange={e => setLisensi(e.target.value.toUpperCase())}
+                    placeholder="LIS-XXXX-XXXX-XXXX"
+                    autoFocus />
+                  <div style={{ fontSize:11, color:"#475569", marginTop:4 }}>
+                    Hanya diperlukan saat pertama kali login atau ganti lisensi. Admin toko cukup memasukkan sekali — kasir lain otomatis terhubung.
+                  </div>
+                </div>
+              )}
             </div>
 
             <button style={{ ...S.cta, opacity: loading ? 0.6 : 1 }}
