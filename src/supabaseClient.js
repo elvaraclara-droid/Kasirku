@@ -238,30 +238,26 @@ export async function fetchKasirByToko(tokoId) {
 
 /** Tambah kasir baru */
 export async function tambahKasir({ tokoId, username, password, nama, role = "kasir" }) {
-  const { data: existing } = await supabase
-    .from("kasir").select("id").eq("toko_id", tokoId).eq("username", username).maybeSingle();
-  if (existing) throw new Error("Username sudah digunakan di toko ini.");
-
-  const { data, error } = await supabase
-    .from("kasir")
-    .insert({ toko_id: tokoId, username, password, nama, role, aktif: true })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("admin_tambah_kasir", {
+    p_toko_id: tokoId, p_username: username, p_password: password,
+    p_nama: nama || username, p_role: role,
+  });
   if (error) throw error;
-  return data;
+  return { id: data };
 }
 
 /** Update data kasir */
 export async function updateKasir(id, { nama, password, role, aktif }) {
-  const updates = { nama, role, aktif, updated_at: new Date().toISOString() };
-  if (password) updates.password = password; // hanya update jika diisi
-  const { error } = await supabase.from("kasir").update(updates).eq("id", id);
+  const { error } = await supabase.rpc("admin_update_kasir", {
+    p_id: id, p_nama: nama, p_password: password || "",
+    p_role: role, p_aktif: aktif !== false,
+  });
   if (error) throw error;
 }
 
 /** Hapus kasir */
 export async function hapusKasir(id) {
-  const { error } = await supabase.from("kasir").delete().eq("id", id);
+  const { error } = await supabase.rpc("admin_hapus_kasir", { p_id: id });
   if (error) throw error;
 }
 
@@ -301,25 +297,24 @@ export async function fetchCabangByToko(tokoId) {
 }
 
 export async function tambahCabang({ tokoId, nama, alamat, telepon }) {
-  const { data, error } = await supabase
-    .from("cabang")
-    .insert({ toko_id: tokoId, nama, alamat: alamat || "", telepon: telepon || "", aktif: true })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("admin_tambah_cabang", {
+    p_toko_id: tokoId, p_nama: nama,
+    p_alamat: alamat || "", p_telepon: telepon || "",
+  });
   if (error) throw error;
-  return data;
+  return { id: data };
 }
 
 export async function updateCabang(id, { nama, alamat, telepon, aktif }) {
-  const { error } = await supabase
-    .from("cabang")
-    .update({ nama, alamat, telepon, aktif, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const { error } = await supabase.rpc("admin_update_cabang", {
+    p_id: id, p_nama: nama, p_alamat: alamat || "",
+    p_telepon: telepon || "", p_aktif: aktif !== false,
+  });
   if (error) throw error;
 }
 
 export async function hapusCabang(id) {
-  const { error } = await supabase.from("cabang").delete().eq("id", id);
+  const { error } = await supabase.rpc("admin_hapus_cabang", { p_id: id });
   if (error) throw error;
 }
 
@@ -349,22 +344,22 @@ export async function fetchKategori(tokoId) {
 }
 
 export async function tambahKategori({ tokoId, nama, warna }) {
-  const { data, error } = await supabase
-    .from("kategori")
-    .insert({ toko_id: tokoId, nama, warna: warna || "#6B7280" })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("admin_tambah_kategori", {
+    p_toko_id: tokoId, p_nama: nama, p_warna: warna || "#6B7280",
+  });
   if (error) throw error;
-  return data;
+  return { id: data };
 }
 
 export async function updateKategori(id, { nama, warna }) {
-  const { error } = await supabase.from("kategori").update({ nama, warna }).eq("id", id);
+  const { error } = await supabase.rpc("admin_update_kategori", {
+    p_id: id, p_nama: nama, p_warna: warna,
+  });
   if (error) throw error;
 }
 
 export async function hapusKategori(id) {
-  const { error } = await supabase.from("kategori").delete().eq("id", id);
+  const { error } = await supabase.rpc("admin_hapus_kategori", { p_id: id });
   if (error) throw error;
 }
 
@@ -418,26 +413,22 @@ export async function tambahProduk({
   tokoId, kategoriId, kodeSku, nama, deskripsi,
   hargaJual, hargaModal, stok, stokMinimum, satuan, gambarUrl,
 }) {
-  const { data, error } = await supabase
-    .from("produk")
-    .insert({
-      toko_id:      tokoId,
-      kategori_id:  kategoriId || null,
-      kode_sku:     kodeSku || "",
-      nama,
-      deskripsi:    deskripsi || "",
-      harga_jual:   hargaJual,
-      harga_modal:  hargaModal || 0,
-      stok:         stok || 0,
-      stok_minimum: stokMinimum || 0,
-      satuan:       satuan || "pcs",
-      gambar_url:   gambarUrl || "",
-      aktif:        true,
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("admin_tambah_produk", {
+    p_toko_id:      tokoId,
+    p_kategori_id:  kategoriId || null,
+    p_kode_sku:     kodeSku || "",
+    p_nama:         nama,
+    p_deskripsi:    deskripsi || "",
+    p_harga_jual:   hargaJual,
+    p_harga_modal:  hargaModal || 0,
+    p_stok:         stok || 0,
+    p_stok_minimum: stokMinimum || 0,
+    p_satuan:       satuan || "pcs",
+    p_gambar_url:   gambarUrl || "",
+    p_aktif:        true,
+  });
   if (error) throw error;
-  return data;
+  return { id: data };
 }
 
 /** Update produk */
@@ -445,32 +436,26 @@ export async function updateProduk(id, {
   kategoriId, kodeSku, nama, deskripsi,
   hargaJual, hargaModal, stok, stokMinimum, satuan, gambarUrl, aktif,
 }) {
-  const { error } = await supabase
-    .from("produk")
-    .update({
-      kategori_id:  kategoriId ?? null,
-      kode_sku:     kodeSku,
-      nama,
-      deskripsi,
-      harga_jual:   hargaJual,
-      harga_modal:  hargaModal,
-      stok,
-      stok_minimum: stokMinimum,
-      satuan,
-      gambar_url:   gambarUrl,
-      aktif,
-      updated_at:   new Date().toISOString(),
-    })
-    .eq("id", id);
+  const { error } = await supabase.rpc("admin_update_produk", {
+    p_id:           id,
+    p_kategori_id:  kategoriId ?? null,
+    p_kode_sku:     kodeSku || "",
+    p_nama:         nama,
+    p_deskripsi:    deskripsi || "",
+    p_harga_jual:   hargaJual,
+    p_harga_modal:  hargaModal || 0,
+    p_stok:         stok || 0,
+    p_stok_minimum: stokMinimum || 0,
+    p_satuan:       satuan || "pcs",
+    p_gambar_url:   gambarUrl || "",
+    p_aktif:        aktif !== false,
+  });
   if (error) throw error;
 }
 
 /** Hapus produk (soft delete → nonaktifkan) */
 export async function hapusProduk(id) {
-  const { error } = await supabase
-    .from("produk")
-    .update({ aktif: false, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const { error } = await supabase.rpc("admin_hapus_produk", { p_id: id });
   if (error) throw error;
 }
 
