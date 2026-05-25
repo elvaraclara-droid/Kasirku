@@ -248,7 +248,7 @@ export default function KasirPage({ auth, sesi, onLogout, onTutupSesi }) {
         bayar:        Number(bayar || total),
         catatan:      "",
       });
-      setLastTrx({ ...trx, kembalian, totalDibayar: total });
+      setLastTrx({ ...trx, kembalian, totalDibayar: total, items: keranjang.map(i => ({ nama_produk: i.namaProduk, qty: i.qty, subtotal: i.subtotal })) });
       resetKeranjang();
       setModal("struk");
     } catch (e) {
