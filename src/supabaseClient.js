@@ -78,12 +78,11 @@ export async function registerToko({
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Login kasir via RPC.
- * Sekaligus validasi lisensi aktif & kembalikan semua data sesi.
- * Return null jika gagal, atau object sesi jika berhasil.
+ * Login kasir dengan lisensi key (pertama kali / lisensi berubah).
+ * Lisensi key disimpan ke DB agar login berikutnya tidak perlu input lagi.
  */
 export async function loginKasir(lisensiKey, username, password) {
-  const { data, error } = await supabase.rpc("cek_login_kasir", {
+  const { data, error } = await supabase.rpc("cek_login_kasir_simpan", {
     p_lisensi_key: lisensiKey.toUpperCase().trim(),
     p_username:    username.trim(),
     p_password:    password,
@@ -91,22 +90,40 @@ export async function loginKasir(lisensiKey, username, password) {
   if (error) throw error;
   const row = data?.[0];
   if (!row?.berhasil) throw new Error(row?.pesan || "Login gagal.");
+  return mapSesi(row);
+}
 
+/**
+ * Login kasir tanpa lisensi key (sudah pernah login, lisensi tersimpan di DB).
+ */
+export async function loginKasirTanpaLisensi(username, password) {
+  const { data, error } = await supabase.rpc("cek_login_kasir_tanpa_lisensi", {
+    p_username: username.trim(),
+    p_password: password,
+  });
+  if (error) throw error;
+  const row = data?.[0];
+  if (!row?.berhasil) throw new Error(row?.pesan || "Login gagal.");
+  return mapSesi(row);
+}
+
+function mapSesi(row) {
   return {
-    kasirId:      row.kasir_id,
-    namaKasir:    row.nama_kasir,
-    roleKasir:    row.role_kasir,       // 'admin_toko' | 'kasir'
-    tokoId:       row.toko_id,
-    namaToko:     row.nama_toko,
-    kodeToko:     row.kode_toko,
-    logoUrl:      row.logo_url,
-    paket:        row.paket,
-    tglExpired:   row.tgl_expired,      // null = lifetime
-    maksProduk:   row.maks_produk,      // null = unlimited
-    maksKasir:    row.maks_kasir,
-    maksCabang:   row.maks_cabang,
+    kasirId:    row.kasir_id,
+    namaKasir:  row.nama_kasir,
+    roleKasir:  row.role_kasir,
+    tokoId:     row.toko_id,
+    namaToko:   row.nama_toko,
+    kodeToko:   row.kode_toko,
+    logoUrl:    row.logo_url,
+    paket:      row.paket,
+    tglExpired: row.tgl_expired,
+    maksProduk: row.maks_produk,
+    maksKasir:  row.maks_kasir,
+    maksCabang: row.maks_cabang,
   };
 }
+
 
 
 // ══════════════════════════════════════════════════════════════
