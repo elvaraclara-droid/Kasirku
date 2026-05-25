@@ -501,57 +501,24 @@ export async function countProdukAktif(tokoId) {
 
 /** Buka sesi kasir */
 export async function bukaSesiKasir({ tokoId, cabangId, kasirId, modalAwal }) {
-  // Pastikan tidak ada sesi yang masih terbuka
-  const { data: sesiAktif } = await supabase
-    .from("sesi_kasir")
-    .select("id")
-    .eq("kasir_id", kasirId)
-    .is("ditutup_at", null)
-    .maybeSingle();
-  if (sesiAktif) throw new Error("Masih ada sesi kasir yang belum ditutup.");
-
-  const { data, error } = await supabase
-    .from("sesi_kasir")
-    .insert({
-      toko_id:   tokoId,
-      cabang_id: cabangId || null,
-      kasir_id:  kasirId,
-      modal_awal: modalAwal || 0,
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("buka_sesi_kasir", {
+    p_toko_id:   tokoId,
+    p_cabang_id: cabangId || null,
+    p_kasir_id:  kasirId,
+    p_modal:     modalAwal || 0,
+  });
   if (error) throw error;
-  return data;
+  // RPC mengembalikan BIGINT (id sesi), wrap jadi object
+  return { id: data };
 }
 
-/** Tutup sesi kasir — hitung total dari transaksi */
+/** Tutup sesi kasir — via RPC (bypass RLS) */
 export async function tutupSesiKasir(sesiId, { catatan } = {}) {
-  // Agregasi transaksi sesi ini
-  const { data: trxList, error: errT } = await supabase
-    .from("transaksi")
-    .select("total, metode_bayar")
-    .eq("sesi_id", sesiId)
-    .eq("status", "selesai");
-  if (errT) throw errT;
-
-  const totalPenjualan = trxList.reduce((s, t) => s + Number(t.total), 0);
-  const totalTunai     = trxList.filter(t => t.metode_bayar === "tunai").reduce((s, t) => s + Number(t.total), 0);
-  const totalNonTunai  = totalPenjualan - totalTunai;
-
-  const { error } = await supabase
-    .from("sesi_kasir")
-    .update({
-      ditutup_at:        new Date().toISOString(),
-      total_penjualan:   totalPenjualan,
-      total_tunai:       totalTunai,
-      total_non_tunai:   totalNonTunai,
-      jumlah_transaksi:  trxList.length,
-      catatan:           catatan || "",
-    })
-    .eq("id", sesiId);
+  const { error } = await supabase.rpc("tutup_sesi_kasir", {
+    p_sesi_id: sesiId,
+    p_catatan: catatan || "",
+  });
   if (error) throw error;
-
-  return { totalPenjualan, totalTunai, totalNonTunai, jumlahTransaksi: trxList.length };
 }
 
 /** Ambil sesi aktif kasir (ditutup_at masih null) */
@@ -585,7 +552,7 @@ export async function fetchRiwayatSesi(tokoId, { limit = 30 } = {}) {
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Simpan transaksi lengkap (header + items) dalam satu operasi.
+ * Simpan transaksi lengkap (header + items) via RPC — bypass RLS.
  * Trigger di DB akan otomatis mengurangi stok.
  */
 export async function simpanTransaksi({
@@ -594,7 +561,7 @@ export async function simpanTransaksi({
   pajakPersen = 0, metodeBayar = "tunai",
   bayar = 0, catatan = "",
 }) {
-  // Hitung total
+  // Hitung total di sisi client
   const subtotal      = items.reduce((s, i) => s + i.subtotal, 0);
   const diskon        = diskonNominal || (subtotal * diskonPersen / 100);
   const setelahDiskon = subtotal - diskon;
@@ -602,41 +569,8 @@ export async function simpanTransaksi({
   const total         = setelahDiskon + pajak;
   const kembalian     = metodeBayar === "tunai" ? Math.max(0, bayar - total) : 0;
 
-  // Generate nomor transaksi
-  const { data: nomorData, error: errNomor } = await supabase
-    .rpc("generate_nomor_transaksi", { p_toko_id: tokoId });
-  if (errNomor) throw errNomor;
-  const nomorTransaksi = nomorData;
-
-  // Insert header transaksi
-  const { data: trx, error: errTrx } = await supabase
-    .from("transaksi")
-    .insert({
-      toko_id:         tokoId,
-      cabang_id:       cabangId || null,
-      kasir_id:        kasirId,
-      sesi_id:         sesiId || null,
-      nomor_transaksi: nomorTransaksi,
-      subtotal,
-      diskon_persen:   diskonPersen,
-      diskon_nominal:  diskon,
-      pajak_persen:    pajakPersen,
-      pajak_nominal:   pajak,
-      total,
-      metode_bayar:    metodeBayar,
-      bayar,
-      kembalian,
-      status:          "selesai",
-      catatan,
-    })
-    .select()
-    .single();
-  if (errTrx) throw errTrx;
-
-  // Insert items
-  const rows = items.map(i => ({
-    transaksi_id:  trx.id,
-    toko_id:       tokoId,
+  // Siapkan items sebagai JSON untuk RPC
+  const itemsJson = items.map(i => ({
     produk_id:     i.produkId || null,
     nama_produk:   i.namaProduk,
     kode_sku:      i.kodeSku || "",
@@ -648,10 +582,27 @@ export async function simpanTransaksi({
     diskon_nominal:i.diskonNominal || 0,
     subtotal:      i.subtotal,
   }));
-  const { error: errItems } = await supabase.from("transaksi_item").insert(rows);
-  if (errItems) throw errItems;
 
-  return { ...trx, items: rows, nomorTransaksi };
+  const { data: trxId, error } = await supabase.rpc("simpan_transaksi", {
+    p_toko_id:        tokoId,
+    p_cabang_id:      cabangId || null,
+    p_kasir_id:       kasirId,
+    p_sesi_id:        sesiId || null,
+    p_subtotal:       subtotal,
+    p_diskon_persen:  diskonPersen,
+    p_diskon_nominal: diskon,
+    p_pajak_persen:   pajakPersen,
+    p_pajak_nominal:  pajak,
+    p_total:          total,
+    p_metode_bayar:   metodeBayar,
+    p_bayar:          bayar,
+    p_kembalian:      kembalian,
+    p_catatan:        catatan,
+    p_items:          JSON.stringify(itemsJson),
+  });
+  if (error) throw error;
+
+  return { id: trxId, total, kembalian };
 }
 
 /** Void transaksi (trigger akan kembalikan stok) */
