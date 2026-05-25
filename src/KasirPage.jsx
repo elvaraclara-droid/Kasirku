@@ -248,7 +248,7 @@ export default function KasirPage({ auth, sesi, onLogout, onTutupSesi }) {
         bayar:        Number(bayar || total),
         catatan:      "",
       });
-      setLastTrx({ ...trx, kembalian, totalDibayar: total, items: keranjang.map(i => ({ nama_produk: i.namaProduk, qty: i.qty, subtotal: i.subtotal })) });
+      setLastTrx({ ...trx, kembalian, totalDibayar: total, metode_bayar: metodeBayar, bayar: Number(bayar || total), items: keranjang.map(i => ({ produk_id: i.produkId, nama_produk: i.namaProduk, qty: i.qty, subtotal: i.subtotal })) });
       resetKeranjang();
       setModal("struk");
     } catch (e) {
@@ -602,6 +602,9 @@ export default function KasirPage({ auth, sesi, onLogout, onTutupSesi }) {
                     <Row label="Kembalian" val={formatRupiah(lastTrx.kembalian)} color={C.success} />
                   </>
                 )}
+              </div>
+              <div style={{ borderTop:`1px dashed ${C.border}`, marginTop:8, paddingTop:8, textAlign:"center", color:C.textMuted, fontSize:11 }}>
+                Terima kasih telah berbelanja!
               </div>
             </div>
 
